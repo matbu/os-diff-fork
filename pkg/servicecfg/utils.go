@@ -17,21 +17,17 @@
 package servicecfg
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
-	"github.com/openstack-k8s-operators/os-diff/pkg/godiff"
+	"os"
 	"os/exec"
 	"strings"
-)
 
-func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
-}
+	"github.com/openstack-k8s-operators/os-diff/pkg/common"
+	"github.com/openstack-k8s-operators/os-diff/pkg/godiff"
+	"gopkg.in/yaml.v3"
+)
 
 func CompareIniConfig(rawdata1 []byte, rawdata2 []byte, ocpConfig string, serviceConfig string) ([]string, error) {
 
@@ -45,7 +41,7 @@ func CompareIniConfig(rawdata1 []byte, rawdata2 []byte, ocpConfig string, servic
 
 func GetConfigFromPod(serviceConfigPath string, podName string, containerName string) ([]byte, error) {
 
-	if TestOCConnection() {
+	if common.TestOCConnection() {
 		fullName, err := GetPodFullName(podName)
 		if err != nil {
 			return nil, err
@@ -88,17 +84,8 @@ func GetPodFullName(podName string) (string, error) {
 	return string(output[:len(output)-1]), nil
 }
 
-func TestOCConnection() bool {
-	cmd := exec.Command("oc", "whoami")
-	_, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return true
-}
-
 func GetOCConfigMap(configMapName string) ([]byte, error) {
-	if TestOCConnection() {
+	if common.TestOCConnection() {
 		// Get full pod name
 		cmd := "oc get configmap/" + configMapName + " -o yaml"
 		output, err := exec.Command("bash", "-c", cmd).Output()
@@ -133,36 +120,59 @@ func LoadServiceConfig(file string) ([]byte, error) {
 	return serviceConfig, nil
 }
 
-func cleanIniSections(config string) string {
-	lines := strings.Split(config, "\n")
-	sectionMap := make(map[string][]string)
-	currentSection := ""
+func LoadFilesIntoMap(fileName string) (map[string]string, error) {
+	result := make(map[string]string)
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		// Check if line is a section header
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			currentSection = strings.TrimPrefix(strings.TrimSuffix(line, "]"), "[")
-			continue
+	file, err := os.Open(fileName)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			parts = strings.SplitN(line, ":", 2)
 		}
-		// Skip empty lines or lines without '='
-		if line == "" || !strings.Contains(line, "=") {
-			continue
-		}
-		// Append key-value pairs to section map
-		if currentSection != "" {
-			sectionMap[currentSection] = append(sectionMap[currentSection], line)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			result[key] = value
 		}
 	}
-	var sb strings.Builder
-	// Build updated INI string
-	for section, lines := range sectionMap {
-		sb.WriteString(fmt.Sprintf("[%s]\n", section))
-		for _, line := range lines {
-			sb.WriteString(fmt.Sprintf("%s\n", line))
-		}
-		sb.WriteString("\n")
+	if err := scanner.Err(); err != nil {
+		return nil, err
 	}
 
-	return sb.String()
+	return result, nil
+}
+
+func ExtractCustomServiceConfig(yamlData string) ([]string, error) {
+	var data map[string]interface{}
+	if err := yaml.Unmarshal([]byte(yamlData), &data); err != nil {
+		return nil, err
+	}
+
+	var customServiceConfigs []string
+	for _, value := range data {
+		spec, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for _, v := range spec {
+			template, ok := v.(map[string]interface{})["template"].(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			customServiceConfig, ok := template["customServiceConfig"].(string)
+			if !ok {
+				continue
+			}
+			customServiceConfigs = append(customServiceConfigs, customServiceConfig)
+		}
+	}
+	return customServiceConfigs, nil
 }

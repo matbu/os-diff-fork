@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/openstack-k8s-operators/os-diff/pkg/collectcfg"
 	"github.com/openstack-k8s-operators/os-diff/pkg/common"
 
@@ -53,6 +54,7 @@ This command will populate the config.yaml file with the podman and image Ids an
 		if serviceConfig == "" {
 			serviceConfig = config.Default.ServiceConfigFile
 		}
+		configPath := CheckFilesPresence(serviceConfig)
 
 		if cloud == "ocp" {
 			// Test OCP connection:
@@ -62,30 +64,31 @@ This command will populate the config.yaml file with the podman and image Ids an
 			}
 			// OCP Settings
 			localOCPDir := config.Openshift.OcpLocalConfigPath
-			err := collectcfg.FetchConfigFromEnv(serviceConfig, localOCPDir, "", false, config.Openshift.Connection, "")
+			err := collectcfg.FetchConfigFromEnv(configPath, localOCPDir, "", false, config.Openshift.Connection, "", "", filters)
 			if err != nil {
 				fmt.Println("Error while collecting config: ", err)
 				return
 			}
 		} else if cloud == "tripleo" {
 			// TRIPLEO Settings:
-			standaloneSsh := config.Tripleo.SshCmd
+			sshCmd := config.Tripleo.SshCmd
+			fullCmd := sshCmd + " " + config.Tripleo.DirectorHost
 			remoteConfigDir := config.Tripleo.RemoteConfigPath
 			localConfigDir := config.Tripleo.LocalConfigPath
-
-			if !common.TestSshConnection(standaloneSsh) {
-				fmt.Println("Please check your SSH configuration: " + standaloneSsh)
+			if !common.TestSshConnection(fullCmd) {
+				fmt.Println("Please check your SSH configuration: " + fullCmd)
 				return
 			}
 			if update || updateOnly {
-				collectcfg.SetTripleODataEnv(serviceConfig, standaloneSsh, filters, true)
-			}
-			if !updateOnly {
-				err := collectcfg.FetchConfigFromEnv(serviceConfig, localConfigDir, remoteConfigDir, true, config.Tripleo.Connection, standaloneSsh)
-				if err != nil {
-					fmt.Println("Error while collecting config: ", err)
+				collectcfg.SetTripleODataEnv(configPath, fullCmd, filters, true)
+				if updateOnly {
 					return
 				}
+			}
+			err := collectcfg.FetchConfigFromEnv(configPath, localConfigDir, remoteConfigDir, true, config.Tripleo.Connection, sshCmd, config.Tripleo.DirectorHost, filters)
+			if err != nil {
+				fmt.Println("Error while collecting config: ", err)
+				return
 			}
 		} else {
 			fmt.Println("Error unkown cloud", cloud)
