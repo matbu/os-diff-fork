@@ -24,6 +24,7 @@ import (
 	"github.com/openstack-k8s-operators/os-diff/pkg/common"
 	"github.com/openstack-k8s-operators/os-diff/pkg/godiff"
 )
+
 var config Config
 
 // Service YAML Config Structure
@@ -46,7 +47,6 @@ type Config struct {
 	Services map[string]Service `yaml:"services"`
 }
 
->>>>>>> 2f61bfb (Add edpm service support)
 type OpenStackDataPlaneNodeSet struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
