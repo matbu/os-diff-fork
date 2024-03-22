@@ -19,20 +19,11 @@ package servicecfg
 import (
 	"fmt"
 	"io/ioutil"
-<<<<<<< HEAD
 	"strings"
 
 	"github.com/openstack-k8s-operators/os-diff/pkg/common"
 	"github.com/openstack-k8s-operators/os-diff/pkg/godiff"
 )
-
-=======
-	"os-diff/pkg/godiff"
-	"strings"
-
-	"gopkg.in/yaml.v2"
-)
-
 var config Config
 
 // Service YAML Config Structure
